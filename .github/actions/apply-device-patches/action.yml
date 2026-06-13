@@ -1,38 +1,80 @@
 name: 'Apply Device-Specific Patches'
-description: 'Apply WiFi/Bluetooth fixes for Samsung and Xiaomi 6.6 GKI devices'
+description: 'Apply WiFi/Bluetooth fixes for Samsung and Xiaomi android15-6.6 GKI devices'
+
 inputs:
   version:
-    description: 'Kernel config version (e.g., android15-6.6)'
+    description: 'Kernel config version'
     required: true
+    default: "android15-6.6"
   kernel_version:
-    description: 'Kernel version (e.g., 6.6)'
+    description: 'Kernel version'
     required: true
+    default: "6.6"
+  sublevel:
+    description: 'Kernel sublevel'
+    required: true
+    default: "89"
 
 runs:
   using: "composite"
   steps:
-    - name: Fix WiFi and Bluetooth on Samsung 6.6 GKI Devices
-      if: ${{ inputs.version == 'android15-6.6' }}
+    - name: Fix WiFi and Bluetooth on Samsung android15-6.6 GKI Devices
+      if: ${{ inputs.version == 'android15-6.6' && inputs.kernel_version == '6.6' && inputs.sublevel == '89' }}
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
-        SYMBOL_LIST=android/abi_gki_aarch64_galaxy
-        echo "kdp_set_cred_non_rcu" >> $SYMBOL_LIST
-        echo "kdp_usecount_dec_and_test" >> $SYMBOL_LIST
-        echo "kdp_usecount_inc" >> $SYMBOL_LIST
+        set -e
+
+        SYMBOL_LIST="android/abi_gki_aarch64_galaxy"
+
+        add_symbol() {
+          local symbol="$1"
+          if [ -f "$SYMBOL_LIST" ]; then
+            grep -qxF "$symbol" "$SYMBOL_LIST" || echo "$symbol" >> "$SYMBOL_LIST"
+          else
+            echo "$symbol" >> "$SYMBOL_LIST"
+          fi
+        }
+
+        add_symbol "kdp_set_cred_non_rcu"
+        add_symbol "kdp_usecount_dec_and_test"
+        add_symbol "kdp_usecount_inc"
 
         PATCH="${{ github.workspace }}/kernel_patches/samsung/min_kdp/add-min_kdp-symbols.patch"
-        if patch -p1 --dry-run < "$PATCH"; then
-          patch -p1 --no-backup-if-mismatch < $PATCH
+
+        if [ -f "$PATCH" ]; then
+          if patch -p1 --dry-run < "$PATCH"; then
+            patch -p1 --no-backup-if-mismatch < "$PATCH"
+          else
+            echo "Samsung min_kdp patch already applied or not applicable. Skipping."
+          fi
+        else
+          echo "Samsung min_kdp patch not found. Skipping patch apply."
         fi
 
-        cp "${{ github.workspace }}/kernel_patches/samsung/min_kdp/min_kdp.c" drivers/min_kdp.c
-        echo "obj-y += min_kdp.o" >> drivers/Makefile
+        if [ -f "${{ github.workspace }}/kernel_patches/samsung/min_kdp/min_kdp.c" ]; then
+          cp "${{ github.workspace }}/kernel_patches/samsung/min_kdp/min_kdp.c" drivers/min_kdp.c
+          grep -qxF "obj-y += min_kdp.o" drivers/Makefile || echo "obj-y += min_kdp.o" >> drivers/Makefile
+        else
+          echo "min_kdp.c not found. Skipping min_kdp source copy."
+        fi
 
-    - name: Fix WiFi and Bluetooth on Xiaomi 6.6 GKI Devices
-      if: ${{ inputs.version == 'android15-6.6' }}
+    - name: Fix WiFi and Bluetooth on Xiaomi android15-6.6 GKI Devices
+      if: ${{ inputs.version == 'android15-6.6' && inputs.kernel_version == '6.6' && inputs.sublevel == '89' }}
       shell: bash
       working-directory: ${{ github.workspace }}/kernel/common
       run: |
-        SYMBOL_LIST=android/abi_gki_aarch64_xiaomi
-        echo "device_find_any_child" >> $SYMBOL_LIST
+        set -e
+
+        SYMBOL_LIST="android/abi_gki_aarch64_xiaomi"
+
+        add_symbol() {
+          local symbol="$1"
+          if [ -f "$SYMBOL_LIST" ]; then
+            grep -qxF "$symbol" "$SYMBOL_LIST" || echo "$symbol" >> "$SYMBOL_LIST"
+          else
+            echo "$symbol" >> "$SYMBOL_LIST"
+          fi
+        }
+
+        add_symbol "device_find_any_child"
